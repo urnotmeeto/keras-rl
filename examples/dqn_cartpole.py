@@ -1,13 +1,16 @@
 import numpy as np
 import gym
+import datetime
 
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten
 from keras.optimizers import Adam
+from keras.callbacks import TensorBoard
 
 from rl.agents.dqn import DQNAgent
 from rl.policy import BoltzmannQPolicy
 from rl.memory import SequentialMemory
+from rl.callbacks import FileLogger
 
 
 ENV_NAME = 'CartPole-v0'
@@ -18,6 +21,7 @@ env = gym.make(ENV_NAME)
 np.random.seed(123)
 env.seed(123)
 nb_actions = env.action_space.n
+print(env.observation_space.shape)
 
 # Next, we build a very simple model.
 model = Sequential()
@@ -37,13 +41,20 @@ print(model.summary())
 memory = SequentialMemory(limit=50000, window_length=1)
 policy = BoltzmannQPolicy()
 dqn = DQNAgent(model=model, nb_actions=nb_actions, memory=memory, nb_steps_warmup=10,
-               target_model_update=1e-2, policy=policy)
-dqn.compile(Adam(lr=1e-3), metrics=['mae'])
+               target_model_update=1e-2, policy=policy, enable_double_dqn=True)
+dqn.compile(Adam(lr=0.001), metrics=['mae'])
+
+log_filename = 'dqn_{}_log.json'.format(ENV_NAME)
+callbacks = [FileLogger(log_filename, interval=10)]
+moment = datetime.datetime.now().strftime('%y%m%d-%H%M')
+NAME = 'CartPole-v0-{}'.format(moment)
+tensorboard = TensorBoard(log_dir='logs/{}'.format(NAME), write_graph=True, write_images=True)
+callbacks += [tensorboard]
 
 # Okay, now it's time to learn something! We visualize the training here for show, but this
 # slows down training quite a lot. You can always safely abort the training prematurely using
 # Ctrl + C.
-dqn.fit(env, nb_steps=50000, visualize=True, verbose=2)
+dqn.fit(env, callbacks=callbacks, nb_steps=50000, visualize=False, verbose=2)
 
 # After training is done, we save the final weights.
 dqn.save_weights('dqn_{}_weights.h5f'.format(ENV_NAME), overwrite=True)
